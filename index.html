@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The page may only load its own files and talk to the public Solana RPCs below. Nothing else. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://lite-api.jup.ag https://mainnet.helius-rpc.com wss://mainnet.helius-rpc.com https://solana-rpc.web.helium.io wss://solana-rpc.web.helium.io https://public.rpc.solanavibestation.com https://solana-rpc.publicnode.com wss://solana-rpc.publicnode.com https://api.mainnet-beta.solana.com wss://api.mainnet-beta.solana.com; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="description" content="Find SOL left behind in stake, program buffers, unclaimed creator fees and empty token accounts, and withdraw it to your own wallet. No fee, open source.">
+<title>Reclaim SOL</title>
+<script src="antiframe.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top-bar">
+  <div class="wrap bar">
+    <span class="brand"><span class="dot"></span>Reclaim</span>
+    <span class="pill">No fee · open source</span>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Your wallet may still own SOL you forgot about.</h1>
+    <p class="lead">Deactivated stake, program buffers, unclaimed creator fees and rewards, idle protocol accounts,
+      wrapped SOL and empty token accounts all keep SOL that belongs to you. Check any address below,
+      then withdraw with your own wallet.</p>
+
+    <div class="scan">
+      <input id="addr" placeholder="Paste a Solana wallet address" autocomplete="off" spellcheck="false">
+      <button id="scanBtn">Check</button>
+    </div>
+    <p class="hint">Checking an address only reads public data. To withdraw, <button class="link" id="connect">connect your wallet</button>.</p>
+  </section>
+
+  <section id="results" hidden>
+    <div class="summary">
+      <div>
+        <div class="lbl">Wallet</div>
+        <div class="mono" id="wallet">—</div>
+      </div>
+      <div class="total">
+        <div class="lbl">You can withdraw</div>
+        <div class="big" id="total">—</div>
+      </div>
+    </div>
+
+    <div id="cats"></div>
+
+    <button id="claim" disabled>Withdraw selected</button>
+    <div class="log" id="log"></div>
+  </section>
+
+  <section class="how">
+    <h2>Where the SOL comes from</h2>
+    <div class="grid">
+      <div class="tile">
+        <h3>Stake and buffers</h3>
+        <p>A stake account you deactivated keeps its SOL until you withdraw it. Buffers left over from
+          program deployments hold their whole deposit until the authority closes them.</p>
+      </div>
+      <div class="tile">
+        <h3>Rewards and creator fees</h3>
+        <p>Launchpads and pools collect fees for token creators and liquidity providers.
+          They sit in a vault until the owner claims them.</p>
+      </div>
+      <div class="tile">
+        <h3>Account rent</h3>
+        <p>Every token you ever held got an account with a rent deposit of about 0.002 SOL.
+          Closing the empty ones returns it; wrapped SOL is unwrapped to plain SOL.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="how">
+    <h2>What you sign</h2>
+    <ul class="facts">
+      <li><b>Everything goes to your wallet.</b> There is no fee and no transfer to anyone else.
+        This site has no program of its own and no server; it runs entirely in your browser.</li>
+      <li><b>Checked twice.</b> Every item is simulated on Solana before it is shown, and the page refuses to send
+        a transaction unless each instruction is exactly one it built for an item from your scan.
+        Your wallet shows its own preview before you approve.</li>
+      <li><b>Nothing is burned unless you pick it.</b> Burning NFTs or leftover tokens is opt-in, item by item.</li>
+      <li><b>No keys.</b> The page never asks for a seed phrase or private key.</li>
+    </ul>
+    <details class="progs">
+      <summary>Programs this page can call</summary>
+      <ul id="programs" class="facts"></ul>
+    </details>
+  </section>
+
+  <footer class="foot">
+        <p>Not affiliated with any marketplace, protocol or wallet. Source code is public in the repository this page is served from.</p>
+  </footer>
+</main>
+
+<script src="web3.iife.min.js"></script>
+<script src="config.js"></script>
+<script src="core.js"></script>
+<script src="sources/accounts.js"></script>
+<script src="sources/buffers.js"></script>
+<script src="sources/burn.js"></script>
+<script src="sources/creators.js"></script>
+<script src="sources/farms.js"></script>
+<script src="sources/legacy-farms.js"></script>
+<script src="sources/lp-positions.js"></script>
+<script src="sources/orderbooks.js"></script>
+<script src="sources/pump.js"></script>
+<script src="sources/raydium-meteora.js"></script>
+<script src="sources/stake.js"></script>
+<script src="sources/system.js"></script>
+<script src="sources/token-extras.js"></script>
+<script src="sources/tokens.js"></script>
+<script src="sources/vesting-governance.js"></script>
+<script src="sources/wound-down.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
