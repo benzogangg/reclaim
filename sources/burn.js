@@ -102,6 +102,15 @@
       record ? meta(record, false, true) : meta(MPL, false, false),
       meta(ID.SYSTEM, false, false), meta(ID.INSTRUCTIONS, false, false), meta(ID.TOKEN, false, false)] })];
 
+  // "Likely spam": no verified collection, and the name or symbol advertises something — a link or domain, a
+  // "claim / airdrop / reward" hook, a dollar amount. Those airdropped scam NFTs are pre-ticked; everything else
+  // (any NFT in a verified collection, or without such signs) stays unticked for the owner to decide.
+  const SPAM_URL = /https?:|www\.|t\.me\//i;                                   // a full link, name or symbol
+  const SPAM_DOMAIN = /\b[a-z0-9-]{2,}\.(com|io|xyz|net|org|app|fun|site|live|pro|gg|click|online|top|vip|cc|link|info|biz|claims?)\b/i;  // name only
+  const SPAM_WORDS = /\b(claim|claimable|airdrop|rewards?|voucher|visit|redeem|eligible|giveaway|mint now)\b|\$\s?\d|\d[\d,.]*\s?(usdc|usdt|sol|jup)\b|✅|🎁/i;
+  const likelySpam = m => !m.collection
+    && (SPAM_URL.test(m.name + " " + m.symbol) || SPAM_DOMAIN.test(m.name) || SPAM_WORDS.test(m.name));
+
   RC.registerSource({
     id: "burn-nft", title: "Burn NFTs (destroys them)", group: "burn", perTx: 5, programs: [MPL], defaultOn: false,
     async scan(pk) {
@@ -132,12 +141,13 @@
         if (c.recLamports === -1) { skipped++; continue; }
         const md = mdPda(c.mint), ed = edPda(c.mint), rec = c.pnft ? trPda(c.mint, c.token) : null;
         const colMd = c.m.collection ? mdPda(c.m.collection) : null;
-        items.push({ key: c.mint, value: c.tokenLamports + c.mdLamports + c.edLamports + (c.recLamports || 0),
-          label: "DESTROY " + (c.pnft ? "pNFT " : "NFT ") + JSON.stringify((c.m.name || "?").slice(0, 32)) + " · mint " + short(c.mint)
+        const spam = likelySpam(c.m);
+        items.push({ key: c.mint, value: c.tokenLamports + c.mdLamports + c.edLamports + (c.recLamports || 0), suggested: spam,
+          label: (spam ? "LIKELY SPAM · " : "") + "DESTROY " + (c.pnft ? "pNFT " : "NFT ") + JSON.stringify((c.m.name || "?").slice(0, 32)) + " · mint " + short(c.mint)
             + (c.m.collection ? " · verified collection " + short(c.m.collection) : ""),
           ixs: burnNft(c.mint, c.token, md, ed, rec, colMd) });
       }
-      return { items: items.sort((a, b) => b.value - a.value),
+      return { items: items.sort((a, b) => (b.suggested - a.suggested) || (b.value - a.value)),
         note: "Burning permanently destroys the NFT. Only tick the ones you know are spam or worthless — this list "
           + "does not judge value, it is sorted by the rent you get back."
           + (skipped ? " " + skipped + " NFT(s) not offered: listed, staked, delegated, locked or print editions." : "") };

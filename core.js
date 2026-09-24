@@ -207,7 +207,7 @@ const RC = (() => {
       if (!c.items.length) continue;
       // Opt-in categories (burns, live orders…) can hold thousands of items; they are simulated only when the
       // user actually picks them (checkOptIn, right before signing), so a spam-heavy wallet still scans fast.
-      if (c.optIn) { for (const i of c.items) i.on = false; c.unchecked = true; continue; }
+      if (c.optIn) { for (const i of c.items) i.on = !!i.suggested; c.unchecked = true; continue; }
       const { ok, dropped, unchecked } = await keepPassing(pk, c.items, c.perTx);
       if (unchecked) c.note = (c.note ? c.note + " " : "") + "Not simulated yet: this wallet has 0 SOL for network fees.";
       c.items = ok;
