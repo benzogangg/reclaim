@@ -98,3 +98,12 @@ h3 { font-size:16px; margin:0 0 6px }
 .or::before, .or::after { content:""; flex:1; height:1px; background:var(--line) }
 .connect-big { width:100%; padding:15px; font-size:17px; background:var(--fg); color:var(--bg) }
 @media (max-width:520px) { .bar-right .pill { display:none } }
+
+/* wallet picker */
+.picker { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:16px; z-index:10 }
+.picker[hidden] { display:none }
+.picker-card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; width:100%; max-width:360px }
+.picker-card h3 { margin:0 0 12px }
+.wallet-choice { display:block; width:100%; margin:0 0 8px; text-align:left; background:var(--bg); color:var(--fg); border:1px solid var(--line) }
+.wallet-choice:hover { border-color:var(--acc) }
+.picker-card button.sec { width:100%; background:transparent; color:var(--mut); border:0 }

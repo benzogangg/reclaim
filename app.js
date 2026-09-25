@@ -127,8 +127,45 @@ function renderPrograms() {
   }
 }
 
+// Installed wallets. Some wallets (OKX, for one) can pose as Phantom or take over window.solana, so each
+// candidate is identified by its own flags and the same object is listed only once, under its real name.
+function detectWallets() {
+  const found = [], seen = new Set();
+  const add = (name, p) => {
+    if (!p || typeof p.connect !== "function" || seen.has(p)) return;
+    seen.add(p); found.push({ name, provider: p });
+  };
+  const okx = window.okxwallet?.solana;
+  add("OKX Wallet", okx);
+  const ph = window.phantom?.solana;
+  if (ph && ph.isPhantom && !ph.isOkxWallet && ph !== okx) add("Phantom", ph);
+  add("Solflare", window.solflare?.isSolflare ? window.solflare : null);
+  add("Backpack", window.backpack?.isBackpack ? window.backpack : null);
+  add("Coinbase Wallet", window.coinbaseSolana);
+  add("Trust Wallet", window.trustwallet?.solana);
+  const any = window.solana;
+  if (any) add(any.isOkxWallet ? "OKX Wallet" : any.isPhantom ? "Phantom" : any.isSolflare ? "Solflare"
+    : any.isBackpack ? "Backpack" : "Browser wallet", any);
+  return found;
+}
+
+// Picks a wallet: the only one installed, or the one the visitor chooses (remembered for next time).
 function pickProvider() {
-  return window.phantom?.solana || window.solflare || window.backpack || window.solana || null;
+  const list = detectWallets();
+  if (!list.length) return Promise.resolve(null);
+  if (list.length === 1) return Promise.resolve(list[0].provider);
+  return new Promise(resolve => {
+    const box = $("walletPicker"), ul = $("walletList");
+    let last = null;
+    try { last = localStorage.getItem("reclaim.wallet"); } catch {}
+    ul.replaceChildren(...list.sort((a, b) => (b.name === last) - (a.name === last)).map(w => {
+      const b = el("button", "wallet-choice", w.name + (w.name === last ? "  · last used" : ""));
+      b.onclick = () => { try { localStorage.setItem("reclaim.wallet", w.name); } catch {} box.hidden = true; resolve(w.provider); };
+      return b;
+    }));
+    $("walletCancel").onclick = () => { box.hidden = true; resolve(null); };
+    box.hidden = false;
+  });
 }
 
 function showConnected() {
@@ -140,8 +177,12 @@ function showConnected() {
 
 async function connectWallet() {
   try {
-    provider = pickProvider();
-    if (!provider) { $("results").hidden = false; log("No wallet found. Open this page in a browser with Phantom, Solflare or Backpack, or in your wallet app's browser.", "bad"); return; }
+    const installed = detectWallets().length;
+    provider = await pickProvider();
+    if (!provider) {
+      if (!installed) { $("results").hidden = false; log("No wallet found. Open this page in a browser with Phantom, Solflare or Backpack, or in your wallet app's browser.", "bad"); }
+      return;
+    }
     const r = await provider.connect();
     owner = new W.PublicKey((r && r.publicKey) || provider.publicKey);
     $("addr").value = b58(owner);
