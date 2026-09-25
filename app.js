@@ -165,20 +165,28 @@ $("claim").onclick = async () => {
     if (bal < 5000 * built.length + 10000) throw new Error("not enough SOL for network fees (need about " + sol(5000 * built.length + 10000) + ")");
     const total = $("total").textContent;
     const txs = built.map(b => b.tx);
-    log("Approve " + (txs.length > 1 ? "the " + txs.length + " transactions" : "the transaction") + " in your wallet…");
-    const sigs = [];
-    if (txs.length > 1 && provider.signAllTransactions) {
-      for (const t of await provider.signAllTransactions(txs)) sigs.push(await c.sendRawTransaction(t.serialize()));
-    } else {
-      for (const tx of txs) {
+    // One transaction per wallet prompt, each with a fresh blockhash (Phantom's recommended flow: it can then
+    // simulate and protect every transaction on its own instead of a batch).
+    const sigs = [], hashes = [];
+    for (let n = 0; n < txs.length; n++) {
+      const tx = txs[n];
+      const fresh = await c.getLatestBlockhash("confirmed");
+      tx.recentBlockhash = fresh.blockhash; tx.lastValidBlockHeight = fresh.lastValidBlockHeight;
+      log("Approve transaction " + (n + 1) + " of " + txs.length + " in your wallet…");
+      try {
         if (provider.signAndSendTransaction) { const r = await provider.signAndSendTransaction(tx); sigs.push(r.signature || r); }
         else sigs.push(await c.sendRawTransaction((await provider.signTransaction(tx)).serialize()));
+        hashes.push(fresh);
+      } catch (e) {
+        if (!sigs.length) throw e;
+        log("Stopped after " + sigs.length + " of " + txs.length + " transactions (" + (e.message || e) + ").", "bad");
+        break;
       }
     }
     log("Sent, waiting for confirmation…");
     let failed = 0;
-    for (const sig of sigs) {
-      const res = await c.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+    for (const [n, sig] of sigs.entries()) {
+      const res = await c.confirmTransaction({ signature: sig, ...hashes[n] }, "confirmed");
       if (res.value.err) failed++;
     }
     const links = sigs.map((g, i) => ({ href: "https://solscan.io/tx/" + encodeURIComponent(g), text: "View on Solscan" + (sigs.length > 1 ? " (" + (i + 1) + ")" : "") }));

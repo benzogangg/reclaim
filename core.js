@@ -185,7 +185,8 @@ const RC = (() => {
   const fits = (pk, ixs) => {
     try {
       const msg = new W.TransactionMessage({ payerKey: pk, recentBlockhash: b58(ID.SYSTEM), instructions: ixs }).compileToLegacyMessage();
-      return msg.serialize().length + 1 + 64 * msg.header.numRequiredSignatures <= 1232;
+      // 1232 is Solana's limit; keep ~150 bytes free so a wallet can add its own guard instructions (Phantom does).
+      return msg.serialize().length + 1 + 64 * msg.header.numRequiredSignatures <= 1080;
     } catch { return false; }
   };
 
