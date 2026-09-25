@@ -78,15 +78,7 @@ function catBox(c) {
       const icb = el("input"); icb.type = "checkbox"; icb.checked = !!i.on;
       icb.onchange = () => { i.on = icb.checked; refresh(); };
       itemBoxes.push(icb);
-      if (i.image) {                                   // Helius CDN only (see core.js thumbnails)
-        const img = el("img", "thumb");
-        img.src = i.image; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
-        img.width = 32; img.height = 32; img.onerror = () => img.remove();
-        row.append(icb, img);
-      }
-      const a = el("a", "mono", i.label);
-      a.href = "https://solscan.io/account/" + b58(i.key); a.target = "_blank"; a.rel = "noopener noreferrer";
-      if (!i.image) row.append(icb, ...(c.items.some(x => x.image) ? [el("span", "thumb")] : []));   // keep the column aligned
+      row.append(icb);
       row.append(a, el("span", "v", sol(i.value)));
       list.append(row);
     }

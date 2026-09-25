@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- The page may only load its own files and talk to the public Solana RPCs below. Nothing else. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://cdn.helius-rpc.com; connect-src 'self' https://lite-api.jup.ag https://mainnet.helius-rpc.com wss://mainnet.helius-rpc.com https://solana-rpc.web.helium.io wss://solana-rpc.web.helium.io https://public.rpc.solanavibestation.com https://solana-rpc.publicnode.com wss://solana-rpc.publicnode.com https://api.mainnet-beta.solana.com wss://api.mainnet-beta.solana.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://lite-api.jup.ag https://mainnet.helius-rpc.com wss://mainnet.helius-rpc.com https://solana-rpc.web.helium.io wss://solana-rpc.web.helium.io https://public.rpc.solanavibestation.com https://solana-rpc.publicnode.com wss://solana-rpc.publicnode.com https://api.mainnet-beta.solana.com wss://api.mainnet-beta.solana.com; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="description" content="Find SOL left behind in stake, program buffers, unclaimed creator fees and empty token accounts, and withdraw it to your own wallet. No fee, open source.">
 <title>Reclaim SOL</title>
@@ -80,7 +80,7 @@
       <li><b>Checked twice.</b> Every item is simulated on Solana before it is shown, and the page refuses to send
         a transaction unless each instruction is exactly one it built for an item from your scan.
         Your wallet shows its own preview before you approve.</li>
-      <li><b>Nothing is burned unless you pick it.</b> Burning NFTs or leftover tokens is opt-in, item by item.</li>
+      <li><b>Nothing is burned unless you pick it.</b> Burning leftover tokens is opt-in, item by item, and NFTs are never burned.</li>
       <li><b>No keys.</b> The page never asks for a seed phrase or private key.</li>
     </ul>
     <details class="progs">

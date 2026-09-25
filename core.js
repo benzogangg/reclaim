@@ -313,39 +313,7 @@ const RC = (() => {
     return Math.floor(total);
   }
 
-  // Helius DAS (digital asset API), available only on our own Helius RPC. Used for NFT thumbnails: DAS returns each
-  // image through Helius' CDN, so the page never loads anything from an NFT creator's (or a spammer's) server.
-  const DAS_URL = (OWN || []).concat(globalThis.RECLAIM_RPCS || []).find(u => /helius-rpc\.com/.test(u)) || null;
-  async function das(method, params) {
-    if (!DAS_URL) return null;
-    const f = THROTTLED.has(DAS_URL) ? throttledFetch : fetch;
-    for (let t = 0; t < 3; t++) {
-      try {
-        const r = await (await f(DAS_URL, { method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })).json();
-        if (r.result !== undefined) return r.result;
-        if (!limited(r.error?.message)) return null;
-      } catch (e) { if (!limited(e)) return null; }
-      await sleep(600 * (t + 1));
-    }
-    return null;
-  }
-  // Thumbnail URL for each asset id (mint or Core asset), resized by the CDN. Missing = no picture.
-  const CDN = "https://cdn.helius-rpc.com/cdn-cgi/image/";
-  async function thumbnails(ids) {
-    const out = new Map();
-    for (const g of chunk(ids.map(k => typeof k === "string" ? k : b58(k)), 1000)) {
-      const res = await das("getAssetBatch", { ids: g });
-      for (const a of res || []) {
-        const files = a?.content?.files || [];
-        const f = files.find(x => /^image\//.test(x.mime || "") && x.cdn_uri) || files.find(x => x.cdn_uri);
-        if (a?.id && f && f.cdn_uri.startsWith(CDN)) out.set(a.id, CDN + "width=96,height=96,fit=cover/" + f.cdn_uri.slice(CDN.length).replace(/^\/+/, ""));
-      }
-    }
-    return out;
-  }
-
-  const api = { W, ID, P, b58, prices, valueInLamports, das, thumbnails, short, chunk, sleep, rpc, search, gpa, tokenAccounts, readAccounts,
+  const api = { W, ID, P, b58, prices, valueInLamports, short, chunk, sleep, rpc, search, gpa, tokenAccounts, readAccounts,
     disc, accDisc, u64, u32, readU64, cat, pda, enc, ata, meta, ixKey, simulate };
   return { ...api, get noFunds() { return noFunds; }, sources, registerSource, scanAll, checkOptIn, groups, keepPassing, chosen, assertSafe, buildTxs };
 })();
