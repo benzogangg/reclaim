@@ -111,6 +111,12 @@
   const likelySpam = m => !m.collection
     && (SPAM_URL.test(m.name + " " + m.symbol) || SPAM_DOMAIN.test(m.name) || SPAM_WORDS.test(m.name));
 
+  // Thumbnails so the owner can see what they are about to destroy (only when our Helius RPC is configured).
+  async function withPictures(items) {
+    try { const pics = await RC.thumbnails(items.map(i => i.key)); for (const i of items) i.image = pics.get(b58(i.key)); }
+    catch (e) { console.warn("thumbnails", e?.message || e); }
+  }
+
   RC.registerSource({
     id: "burn-nft", title: "Burn NFTs (destroys them)", group: "burn", perTx: 5, programs: [MPL], defaultOn: false,
     async scan(pk) {
@@ -147,6 +153,7 @@
             + (c.m.collection ? " · verified collection " + short(c.m.collection) : ""),
           ixs: burnNft(c.mint, c.token, md, ed, rec, colMd) });
       }
+      await withPictures(items);
       return { items: items.sort((a, b) => (b.suggested - a.suggested) || (b.value - a.value)),
         note: "Burning permanently destroys the NFT. Only tick the ones you know are spam or worthless — this list "
           + "does not judge value, it is sorted by the rent you get back."
@@ -246,6 +253,7 @@
             meta(ID.SYSTEM, false, false),
             meta(CORE, false, false)] })] };                      // log wrapper: none
       });
+      await withPictures(items);
       return { items: items.sort((a, b) => b.value - a.value),
         note: "Burning permanently destroys the asset; the account keeps 1 byte of rent, the rest comes back."
           + (frozen ? " " + frozen + " frozen (staked) asset(s) not offered." : "") };
