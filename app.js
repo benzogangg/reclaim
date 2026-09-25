@@ -81,6 +81,8 @@ function catBox(c) {
       icb.onchange = () => { i.on = icb.checked; refresh(); };
       itemBoxes.push(icb);
       row.append(icb);
+      const a = el("a", "mono", i.label);
+      a.href = "https://solscan.io/account/" + b58(i.key); a.target = "_blank"; a.rel = "noopener noreferrer";
       row.append(a, el("span", "v", sol(i.value)));
       list.append(row);
     }
