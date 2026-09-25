@@ -80,11 +80,17 @@
       // Never offer to burn a balance that is worth more than the rent it gives back (Jupiter price, liquid tokens only).
       let valuable = 0;
       const worth = await Promise.all(items.map(it => RC.valueInLamports([{ mint: it.mint, amount: it.amount, decimals: it.decimals }])));
-      const cheap = items.filter((it, k) => { if (worth[k] > it.value) { valuable++; return false; } return true; });
+      let unpriced = 0;   // price could not be loaded: never offer it (a failed lookup is not "worthless")
+      const cheap = items.filter((it, k) => {
+        if (!RC.priceKnown(it.mint)) { unpriced++; return false; }
+        if (worth[k] > it.value) { valuable++; return false; }
+        return true;
+      });
       return { items: cheap.sort((a, b) => b.value - a.value),
         note: "Burning permanently destroys these tokens (the whole balance) and returns the account rent. If a token "
           + "has value, swap or send it instead of burning. USDC and USDT are never listed."
           + (valuable ? " " + valuable + " token balance(s) worth more than their rent are not offered." : "")
+          + (unpriced ? " " + unpriced + " token(s) not offered because their price could not be checked right now." : "")
           + (skipped ? " " + skipped + " account(s) not offered: frozen, another close authority, or Token-2022 fees/confidential balance." : "") };
     },
   });

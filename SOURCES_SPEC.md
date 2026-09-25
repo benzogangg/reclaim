@@ -35,6 +35,12 @@ Token values
   tokens: value = that estimate, and put the token amount in the label (e.g. "12.3 USDC + 0.01 SOL").
   If the whole value is 0 (worthless token), skip the item unless it also returns rent.
 
+Payout check
+- Every simulation also compares before/after snapshots: an item is dropped if lamports land in someone else's plain
+  wallet or tokens land in a token account held by someone else's wallet. If a protocol itself pays its own fee to a
+  fixed party out of the protocol's escrow (never out of the wallet), list those parties in `feePayees: [PublicKey]`
+  on the item, with a comment saying why.
+
 Rules
 - Only instructions the wallet owner is entitled to sign; every lamport/token goes to the wallet `p` itself
   (or its own ATA). Never a transfer to anyone else, never a fee.

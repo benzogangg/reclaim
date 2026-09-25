@@ -45,8 +45,9 @@ async function auditWallet(addr) {
   const { blockhash, lastValidBlockHeight } = await c.getLatestBlockhash();
   const built = RC.buildTxs(pk, cats, blockhash, lastValidBlockHeight);
   const flags = [], perCat = {};
-  for (const { tx, cat } of built) {
+  for (const { tx, cat, items } of built) {
     const burn = cat.group === "burn";
+    const payees = new Set(items.flatMap(i => (i.feePayees || []).map(k => typeof k === "string" ? k : k.toBase58())));
     const writable = [...new Set(tx.instructions.flatMap(ix => ix.keys.filter(k => k.isWritable).map(k => k.pubkey.toBase58())))];
     if (!writable.includes(me)) writable.push(me);
     const pre = (await RC.readAccounts(writable.map(k => new W.PublicKey(k)))).map(view);
@@ -72,14 +73,17 @@ async function auditWallet(addr) {
       const mine = owner === me || stakeAuth(b) === me || stakeAuth(a) === me;
       if (mine) net += dl;
       // someone else's plain wallet getting SOL
+      if (payees.has(k)) return;
       if (a && a.owner === SYS && a.data.length === 0 && dl > 0) flags.push(["OTHER_SOL", cat.id, k + " +" + dl]);
       if (!a && b && b.owner === SYS && b.data.length === 0 && dl > 0) flags.push(["OTHER_SOL", cat.id, k + " +" + dl + " (new)"]);
       // token movements
       if (isToken(a) || isToken(b)) {
         const amt = x => isToken(x) ? u64(x.data, 64) : 0n;
         const d = amt(b) - amt(a);
-        if (owner === me && d < 0n && !burn) flags.push(["SPENT_TOKENS", cat.id, k + " " + d]);
-        if (owner && owner !== me && d > 0n && W.PublicKey.isOnCurve(new W.PublicKey(owner).toBytes()))
+        const unwrapped = cat.id === "wsol" && (!b || b.lamports === 0 || !isToken(b));  // closing wrapped SOL: tokens turn into SOL
+        const positionNft = /^lp-/.test(cat.id) && d === -1n;   // closing an empty LP position burns its position NFT
+        if (owner === me && d < 0n && !burn && !unwrapped && !positionNft) flags.push(["SPENT_TOKENS", cat.id, k + " " + d]);
+        if (owner && owner !== me && !payees.has(owner) && d > 0n && W.PublicKey.isOnCurve(new W.PublicKey(owner).toBytes()))
           flags.push(["OTHER_TOKENS", cat.id, k + " owner " + owner + " +" + d]);
       }
     });

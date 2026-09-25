@@ -189,6 +189,7 @@
         const needAta = !rt;
         const amt = Number(c.amount) / 10 ** c.decimals;
         items.push({ key: c.pubkey, value,
+          feePayees: [SF_TREASURY, c.partner],   // Streamflow's own fee is paid out of the stream escrow, not the wallet
           label: "stream " + short(c.pubkey) + " · " + amt.toLocaleString("en-US", { maximumFractionDigits: 4 }) + " " + short(c.mint),
           ixs: p => [
             ...(needAta ? [new W.TransactionInstruction({ programId: ID.ATA, data: Uint8Array.of(1), keys: [

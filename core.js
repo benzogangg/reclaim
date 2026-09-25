@@ -143,14 +143,43 @@ const RC = (() => {
     }
   }
 
-  async function simulate(pk, ixs) {
+  // Simulates the instructions and also checks where the money goes, using before/after snapshots of every
+  // writable account. Returns null when fine, otherwise the RPC error or { unsafe: reason }:
+  //  - lamports landing in someone else's plain wallet (system-owned, no data);
+  //  - tokens landing in a token account whose owner is someone else's wallet (on-curve key). This catches a
+  //    wallet's own token account that a drainer took over earlier (SetAuthority): paying into it would hand
+  //    the money to them.
+  const isTokenAcc = (owner, d) => (owner === b58(ID.TOKEN) || owner === b58(ID.TOKEN22)) && d.length >= 165 && (d.length === 165 || d[165] === 2);
+  const b64bytes = s => Uint8Array.from(atob(s), ch => ch.charCodeAt(0));
+  async function simulate(pk, ixs, feePayees) {
+    const allowed = new Set((feePayees || []).map(k => typeof k === "string" ? k : b58(k)));
     const c = await rpc();
+    const me = b58(pk);
+    const writable = [...new Set(ixs.flatMap(ix => ix.keys.filter(k => k.isWritable).map(k => b58(k.pubkey))))].filter(k => k !== me);
+    const pre = writable.length ? await readAccounts(writable.map(k => new W.PublicKey(k))) : [];
     const { blockhash } = await retry(() => c.getLatestBlockhash("confirmed"));
     const msg = new W.TransactionMessage({ payerKey: pk, recentBlockhash: blockhash, instructions: ixs }).compileToLegacyMessage();
     const sim = await retry(() => c.simulateTransaction(new W.VersionedTransaction(msg),
-      { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" }));
-    if (sim.value.err) console.log("simulation failed", JSON.stringify(sim.value.err), (sim.value.logs || []).slice(-6).join("\n"));
-    return sim.value.err;
+      { sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed",
+        ...(writable.length ? { accounts: { encoding: "base64", addresses: writable } } : {}) }));
+    if (sim.value.err) { console.log("simulation failed", JSON.stringify(sim.value.err), (sim.value.logs || []).slice(-6).join("\n")); return sim.value.err; }
+    const post = sim.value.accounts || [];
+    for (let n = 0; n < writable.length; n++) {
+      const a = pre[n], b = post[n];
+      if (!b) continue;
+      const bd = b64bytes(b.data[0]), ad = a ? a.data : new Uint8Array(0), aOwner = a ? b58(a.owner) : null;
+      if (allowed.has(writable[n])) continue;
+      if (b.lamports > (a ? a.lamports : 0) && b.owner === b58(ID.SYSTEM) && bd.length === 0 && (!a || ad.length === 0))
+        return { unsafe: "SOL would go to another wallet " + writable[n] };
+      if (isTokenAcc(b.owner, bd)) {
+        const holder = new W.PublicKey(bd.slice(32, 64));
+        const amt = x => new DataView(x.buffer, x.byteOffset, x.byteLength).getBigUint64(64, true);
+        const before = a && aOwner === b.owner && ad.length >= 165 ? amt(ad) : 0n;
+        if (amt(bd) > before && !holder.equals(pk) && !allowed.has(b58(holder)) && W.PublicKey.isOnCurve(holder.toBytes()))
+          return { unsafe: "tokens would go to an account controlled by " + b58(holder) };
+      }
+    }
+    return null;
   }
 
   const fits = (pk, ixs) => {
@@ -178,16 +207,20 @@ const RC = (() => {
   async function keepPassing(pk, items, perTx) {
     if (noFunds) return { ok: items, dropped: 0, unchecked: true };
     const ok = [];
-    let dropped = 0;
+    let dropped = 0, unsafe = 0;
     for (const g of groups(pk, items, perTx)) {
-      if (!await simulate(pk, g.flatMap(i => i.ixs(pk)))) { ok.push(...g); continue; }
-      for (const i of g) (await simulate(pk, i.ixs(pk))) ? dropped++ : ok.push(i);
+      if (!await simulate(pk, g.flatMap(i => i.ixs(pk)), g.flatMap(i => i.feePayees || []))) { ok.push(...g); continue; }
+      for (const i of g) {
+        const r = await simulate(pk, i.ixs(pk), i.feePayees);
+        if (!r) ok.push(i); else if (r.unsafe) { unsafe++; console.warn("unsafe item left out:", r.unsafe); } else dropped++;
+      }
     }
-    return { ok, dropped };
+    return { ok, dropped, unsafe };
   }
 
   // Runs every source. A source that throws shows up as a category with an error note, never breaks the scan.
   async function scanAll(pk, onProgress) {
+    priceTrouble = false;
     const balance = await (await rpc()).getBalance(pk, "confirmed").catch(() => null);
     if (balance === 0) {
       // A wallet with no SOL cannot pay the network fee, so every simulation would fail and hide real funds.
@@ -199,7 +232,7 @@ const RC = (() => {
       try { r = await s.scan(pk, api); }
       catch (e) { console.warn("source", s.id, scrub(e?.message || e)); r = { items: [], error: "could not check: " + scrub(e?.message || e) }; }
       return { src: s, id: s.id, title: s.title, group: s.group || "other", perTx: s.perTx || 8,
-        items: (r.items || []).filter(i => i.value > 0 || s.allowZero), note: r.note || "", error: r.error || "",
+        items: (r.items || []).filter(i => i.value > 5000 || s.allowZero),   // worth less than the network fee: not shown note: r.note || "", error: r.error || "",
         selected: s.defaultOn !== false, optIn: s.defaultOn === false, updated: r.updated };
     }));
     onProgress && onProgress("Simulating withdrawals…");
@@ -208,7 +241,9 @@ const RC = (() => {
       // Opt-in categories (burns, live orders…) can hold thousands of items; they are simulated only when the
       // user actually picks them (checkOptIn, right before signing), so a spam-heavy wallet still scans fast.
       if (c.optIn) { for (const i of c.items) i.on = !!i.suggested; c.unchecked = true; continue; }
-      const { ok, dropped, unchecked } = await keepPassing(pk, c.items, c.perTx);
+      const { ok, dropped, unchecked, unsafe } = await keepPassing(pk, c.items, c.perTx);
+      if (unsafe) c.note = (c.note ? c.note + " " : "") + unsafe + " item(s) left out: the payout would land in an account "
+        + "someone else controls (for example a token account of yours that an old wallet-drainer approval handed over).";
       if (unchecked) c.note = (c.note ? c.note + " " : "") + "Not simulated yet: this wallet has 0 SOL for network fees.";
       c.items = ok;
       if (dropped) c.note = (c.note ? c.note + " " : "") + dropped + " item(s) left out because their simulation failed.";
@@ -278,24 +313,45 @@ const RC = (() => {
   // One request per batch of up to 50 mints; concurrent callers asking for the same mint share the request.
   // Rate-limited or broken answers are retried a few times and never cached, so a busy price API cannot
   // silently turn real balances into 0.
-  const pricePending = new Map();
+  let priceTrouble = false;
+  const priceFailed = new Set();          // mints whose price could not be loaded in this session (not "worthless")
   async function fetchPrices(g) {
-    for (let t = 0; t < 4; t++) {
+    for (let t = 0; t < 5; t++) {
       try {
         const res = await fetch(PRICE_API + g.join(","));
         if (res.status === 429 || res.status >= 500) throw new Error("price API " + res.status);
         const r = await res.json();
-        for (const m of g) priceCache.set(m, r?.[m] && r[m].liquidity >= 10000 ? Number(r[m].usdPrice) || 0 : 0);
+        for (const m of g) { priceCache.set(m, r?.[m] && r[m].liquidity >= 10000 ? Number(r[m].usdPrice) || 0 : 0); priceFailed.delete(m); }
         return;
-      } catch (e) { console.warn("price", e?.message || e); await sleep(600 * (t + 1) + Math.random() * 300); }
+      } catch (e) { console.warn("price", e?.message || e); await sleep(1000 * (t + 1) + Math.random() * 500); }
     }
+    for (const m of g) priceFailed.add(m);
+    priceTrouble = true;   // every retry failed: items priced in tokens may be missing from this scan
+  }
+  // true only when the price of this mint was actually loaded (a failed lookup must never read as "worthless")
+  const priceKnown = m => priceCache.has(typeof m === "string" ? m : b58(m));
+
+  // All price requests of a scan are pooled: mints asked for within 120 ms go out together, 50 per request,
+  // so a full scan makes a handful of calls instead of hundreds (Jupiter rate-limits bursts).
+  let batch = null;
+  function enqueue(mints) {
+    if (!batch) {
+      const b = { mints: new Set() };
+      b.done = new Promise(res => setTimeout(async () => {
+        if (batch === b) batch = null;
+        const list = [...b.mints].filter(m => !priceCache.has(m));
+        for (const [n, g] of chunk(list, 50).entries()) { if (n) await sleep(350); await fetchPrices(g); }
+        res();
+      }, 120));
+      batch = b;
+    }
+    for (const m of mints) batch.mints.add(m);
+    return batch.done;
   }
   async function prices(mints) {
     const want = [...new Set([...mints.map(m => typeof m === "string" ? m : b58(m)), b58(ID.WSOL)])];
-    const need = want.filter(m => !priceCache.has(m) && !pricePending.has(m));
-    for (const g of chunk(need, 50)) { const p = fetchPrices(g); for (const m of g) pricePending.set(m, p); }
-    await Promise.all(want.map(m => pricePending.get(m)).filter(Boolean));
-    for (const m of want) if (priceCache.has(m)) pricePending.delete(m);
+    const need = want.filter(m => !priceCache.has(m));
+    if (need.length) await enqueue(need);
     return m => priceCache.get(typeof m === "string" ? m : b58(m)) || 0;
   }
   async function valueInLamports(list) {
@@ -313,8 +369,8 @@ const RC = (() => {
     return Math.floor(total);
   }
 
-  const api = { W, ID, P, b58, prices, valueInLamports, short, chunk, sleep, rpc, search, gpa, tokenAccounts, readAccounts,
+  const api = { W, ID, P, b58, prices, valueInLamports, priceKnown, short, chunk, sleep, rpc, search, gpa, tokenAccounts, readAccounts,
     disc, accDisc, u64, u32, readU64, cat, pda, enc, ata, meta, ixKey, simulate };
-  return { ...api, get noFunds() { return noFunds; }, sources, registerSource, scanAll, checkOptIn, groups, keepPassing, chosen, assertSafe, buildTxs };
+  return { ...api, get noFunds() { return noFunds; }, get priceTrouble() { return priceTrouble; }, sources, registerSource, scanAll, checkOptIn, groups, keepPassing, chosen, assertSafe, buildTxs };
 })();
 if (typeof globalThis !== "undefined") globalThis.RC = RC;

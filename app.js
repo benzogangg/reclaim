@@ -44,7 +44,9 @@ async function scan(pk) {
   scanned = pk;
   render();
   const any = cats.some(c => c.items.length);
-  if (any && RC.noFunds) log("This wallet has 0 SOL, so it cannot pay the network fee (about 0.000005 SOL per transaction). "
+  if (RC.priceTrouble) log("Token prices could not be loaded right now, so some items paid in tokens may be missing. "
+    + "Please check again in a minute.", "bad");
+  else if (any && RC.noFunds) log("This wallet has 0 SOL, so it cannot pay the network fee (about 0.000005 SOL per transaction). "
     + "Send it a little SOL (0.001 is plenty), then check again to withdraw.", "bad");
   else if (!any) log("Nothing to withdraw for this wallet right now.");
   else if (!owner || !owner.equals(pk)) log("Only this wallet's owner can withdraw. Connect it to continue.");

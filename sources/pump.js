@@ -19,6 +19,14 @@
 //  - PumpSwap cashback: ATAs of PumpSwap's ["user_volume_accumulator", user] (wSOL or another quote mint). claim_cashback:
 //    user(w), accumulator(w), quote_mint, token_program, accumulator_ata(w), user_token_account(w), system,
 //    event_authority, program.
+//  - Closing the two accumulators themselves (rent, ~0.0018 SOL each): close_user_volume_accumulator,
+//    accounts user(s,w), accumulator(w), event_authority, program (same order in both programs, checked against
+//    mainnet txs 1bqyJHQ2… and 3Ks28XAh…); all its lamports go to the user. The program does not check for
+//    cashback owed (a PumpSwap accumulator with 0.088 wSOL still in its ATA closes fine in simulation), so an
+//    accumulator is closed here only when neither cashback category above has an item for it and it records no
+//    PUMP token incentives (needs_claim @40, total_unclaimed_tokens @41): nothing is left behind. Its ATAs are not
+//    touched (the program has no way to close them; they keep their address and come back with the accumulator).
+//    Pump.fun recreates the accumulator, paid by the trader, on the next trade.
 // Token payouts go to the wallet's own ATA, created idempotently in the same item when missing (its rent is
 // subtracted from the value). wSOL: with no wSOL ATA the item creates it, claims and closes it in one go, so the
 // wallet gets plain SOL; if a wSOL ATA already exists the claim lands there as wSOL and it is left alone.
@@ -40,6 +48,7 @@
     collectAmm: Uint8Array.of(160, 57, 89, 42, 181, 139, 43, 66),     // collect_coin_creator_fee
     cashback: Uint8Array.of(37, 58, 35, 126, 190, 53, 228, 197),      // claim_cashback (both programs)
     cashbackV2: Uint8Array.of(122, 243, 204, 65, 94, 116, 29, 55),    // claim_cashback_v2
+    closeUva: Uint8Array.of(249, 69, 164, 218, 150, 103, 84, 138),    // close_user_volume_accumulator (both programs)
   };
   const pdaVault = pk => pda([enc("creator-vault"), pk.toBytes()], PUMP)[0];
   const pdaAmmAuth = pk => pda([enc("creator_vault"), pk.toBytes()], AMM)[0];
@@ -228,6 +237,40 @@
             meta(AMM, false, false)] }) }));
       }
       return { items: items.filter(i => i.value > 0).sort((a, b) => b.value - a.value) };
+    },
+  });
+
+  // The two accumulators themselves, when nothing is owed from them (see the header): the close returns all
+  // their lamports. Same conditions the cashback categories use, so an accumulator is either claimed there or
+  // closed here, never both; one with cashback owed becomes closable after that claim.
+  RC.registerSource({
+    id: "pump-accumulator-close", title: "Pump.fun trading accumulators", group: "rent", perTx: 4, programs: [PUMP, AMM],
+    async scan(pk) {
+      const { k, acc, rent137 } = await fixed(pk);
+      const items = [];
+      let waiting = 0;
+      const incentives = d => d[40] !== 0 || readU64(d, 41) > 0n;       // needs_claim / total_unclaimed_tokens
+      const close = (prog, uva, ev) => p => [new W.TransactionInstruction({ programId: prog, data: D.closeUva, keys: [
+        meta(p, true, true),              // user: receives all the lamports
+        meta(uva, false, true),           // user volume accumulator PDA: closed
+        meta(ev, false, false),
+        meta(prog, false, false)] })];
+      const u = acc.get(b58(k.uva));
+      if (u && u.owner.equals(PUMP) && u.data.length >= 106) {
+        const solOwed = Math.min(Number(readU64(u.data, 74) - readU64(u.data, 82)), u.lamports - rent137);
+        if (solOwed > 0 || readU64(u.data, 90) > readU64(u.data, 98) || incentives(u.data)) waiting++;
+        else items.push({ key: k.uva, value: u.lamports, label: "Close Pump.fun accumulator · " + fmt(u.lamports, 9) + " SOL",
+          ixs: close(PUMP, k.uva, EV_PUMP) });
+      }
+      const a = acc.get(b58(k.ammUva));
+      if (a && a.owner.equals(AMM) && a.data.length >= 90) {
+        if (amountOf(acc.get(b58(ata(k.ammUva, ID.WSOL)))) > 0n || readU64(a.data, 74) > readU64(a.data, 82) || incentives(a.data)) waiting++;
+        else items.push({ key: k.ammUva, value: a.lamports, label: "Close PumpSwap accumulator · " + fmt(a.lamports, 9) + " SOL",
+          ixs: close(AMM, k.ammUva, EV_AMM) });
+      }
+      const note = (items.length ? "Pump.fun recreates an accumulator (about 0.0018 SOL, paid by you) the next time you trade there." : "")
+        + (waiting ? (items.length ? " " : "") + waiting + " accumulator(s) not closed: cashback or PUMP incentives are still recorded in them." : "");
+      return { items, note };
     },
   });
 })();
