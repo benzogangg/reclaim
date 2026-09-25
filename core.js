@@ -255,7 +255,14 @@ const RC = (() => {
   // What will actually be sent. Opt-in (destructive) choices win: if a chosen burn changes an account, any other
   // chosen item that touches the same account is left out, so nothing is counted twice or fails halfway.
   function chosen(cats, pk) {
-    const picked = cats.filter(c => c.selected).map(c => ({ c, items: c.items.filter(i => i.on) })).filter(x => x.items.length);
+    // The same account (item key) offered by two categories is withdrawn only once, by the first one.
+    const seen = new Set();
+    const picked = cats.filter(c => c.selected).map(c => ({ c, items: c.items.filter(i => {
+      if (!i.on) return false;
+      const k = b58(i.key);
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
+    }) })).filter(x => x.items.length);
     if (!pk) return picked;
     const taken = new Set();
     for (const { c, items } of picked) if (c.optIn)

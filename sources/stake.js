@@ -64,6 +64,8 @@
       for (const { pubkey, account: a } of found) {
         const d = a.data, v = new DataView(d.buffer, d.byteOffset, d.byteLength);
         if (v.getUint32(0, true) !== 2) continue;
+        // only stake that is still delegated: a deactivating or deactivated account is withdrawn in full above
+        if (v.getBigUint64(172, true) !== NO_DEACTIVATION) continue;
         const excess = BigInt(a.lamports) - v.getBigUint64(4, true) - v.getBigUint64(156, true);
         if (excess < 1000000n) continue;                     // under 0.001 SOL is not worth a transaction
         const amount = excess;
