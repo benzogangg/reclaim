@@ -89,3 +89,12 @@ h3 { font-size:16px; margin:0 0 6px }
 .progs summary { cursor:pointer }
 .progs .mono { font-size:12px }
 
+
+/* wallet buttons */
+.bar-right { display:flex; align-items:center; gap:10px }
+.wallet-btn { padding:8px 14px; font-size:14px; border-radius:999px }
+.wallet-btn.on { background:var(--acc-soft); color:var(--acc) }
+.or { display:flex; align-items:center; gap:10px; color:var(--mut); font-size:13px; margin:14px 0 }
+.or::before, .or::after { content:""; flex:1; height:1px; background:var(--line) }
+.connect-big { width:100%; padding:15px; font-size:17px; background:var(--fg); color:var(--bg) }
+@media (max-width:520px) { .bar-right .pill { display:none } }

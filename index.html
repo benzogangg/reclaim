@@ -15,7 +15,10 @@
 <header class="top-bar">
   <div class="wrap bar">
     <span class="brand"><span class="dot"></span>Reclaim</span>
-    <span class="pill">No fee · open source</span>
+    <span class="bar-right">
+      <span class="pill">No fee · open source</span>
+      <button class="wallet-btn" id="connectTop">Connect wallet</button>
+    </span>
   </div>
 </header>
 
@@ -30,7 +33,9 @@
       <input id="addr" placeholder="Paste a Solana wallet address" autocomplete="off" spellcheck="false">
       <button id="scanBtn">Check</button>
     </div>
-    <p class="hint">Checking an address only reads public data. To withdraw, <button class="link" id="connect">connect your wallet</button>.</p>
+    <div class="or"><span>or</span></div>
+    <button class="connect-big" id="connect">Connect wallet to check and withdraw</button>
+    <p class="hint">Checking an address only reads public data. Withdrawing needs your wallet: Phantom, Solflare or Backpack.</p>
   </section>
 
   <section id="results" hidden>

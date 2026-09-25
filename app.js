@@ -131,16 +131,24 @@ function pickProvider() {
   return window.phantom?.solana || window.solflare || window.backpack || window.solana || null;
 }
 
-$("connect").onclick = async () => {
+function showConnected() {
+  const label = owner ? b58(owner).slice(0, 4) + "…" + b58(owner).slice(-4) : "Connect wallet";
+  $("connectTop").textContent = label;
+  $("connectTop").classList.toggle("on", !!owner);
+  $("connect").textContent = owner ? "Connected: " + label + " · check again" : "Connect wallet to check and withdraw";
+}
+
+async function connectWallet() {
   try {
     provider = pickProvider();
     if (!provider) { $("results").hidden = false; log("No wallet found. Open this page in a browser with Phantom, Solflare or Backpack, or in your wallet app's browser.", "bad"); return; }
     const r = await provider.connect();
     owner = new W.PublicKey((r && r.publicKey) || provider.publicKey);
     $("addr").value = b58(owner);
+    showConnected();
     await scan(owner);
   } catch (e) { $("results").hidden = false; log("Error: " + (e.message || e), "bad"); }
-};
+}
 
 $("scanBtn").onclick = async () => {
   let pk;
@@ -200,3 +208,5 @@ $("claim").onclick = async () => {
 };
 
 renderPrograms();
+$("connect").onclick = connectWallet;
+$("connectTop").onclick = connectWallet;
